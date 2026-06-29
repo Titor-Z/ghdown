@@ -6,6 +6,7 @@ use std::io::{IsTerminal, Write};
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
+use clap::builder::styling::{AnsiColor, Effects, Styles};
 use clap::{Parser, Subcommand};
 use futures_util::StreamExt;
 use reqwest::Client;
@@ -14,8 +15,14 @@ use crate::config::{ConfigManager, ProxyStatus};
 use crate::download::DownloadManager;
 use crate::proxy::ProxyManager;
 
+pub const STYLES: Styles = Styles::styled()
+    .header(AnsiColor::Yellow.on_default().effects(Effects::BOLD))
+    .usage(AnsiColor::Green.on_default().effects(Effects::BOLD))
+    .literal(AnsiColor::Cyan.on_default().effects(Effects::BOLD))
+    .placeholder(AnsiColor::BrightBlack.on_default());
+
 #[derive(Parser)]
-#[command(name = "ghdown", version = "0.1.0", about = "GitHub Release 加速下载工具")]
+#[command(name = "ghdown", version = env!("GHDOWN_VERSION"), about = "GitHub Release 加速下载工具", styles = STYLES)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
