@@ -60,6 +60,14 @@
 - 新增 `CHANGELOG.md`，只保留当前版本内容，发版时从 AGENTS.md 同步
 - 更新 AGENTS.md 规范，加入版本号、CI/CD、二进制命名、Changelog 管理规则
 
+### 2026.06.29.0009 — 代理列表更新 + CI 精简 + 版本对齐
+
+- 内置代理从 8 个扩充到 73 个（来自用户提供的公共代理列表）
+- 移除 macOS-13（Intel Mac）CI runner，避免排队等待，保留 Apple Silicon
+- `build.rs` 改用 `DEV_VERSION` 常量，`ghdown --version` 始终显示 AGENTS.md 版本号
+- 新增 `cargo:rerun-if-env-changed`，环境变量 `GHDOWN_VERSION` 变更时自动重编
+- 发版流程文档化到 AGENTS.md 认知修正
+
 ### 2026.06.29.0007 — 多彩 --help 输出
 
 - 使用 `clap::builder::styling::Styles` 自定义 help 样式
@@ -146,4 +154,12 @@
 
 > 存放 AI 在开发过程中的踩坑记录和用户纠正、用户提醒和给予的明确内容，避免后期 agent 再次陷入死循环。
 
-_暂无_
+#### 发版流程（按顺序执行）
+
+1. 在 `AGENTS.md` 的 `## Changelog` 中添加新条目：`### YYYY.MM.DD.xxxx — 标题`
+2. 更新 `build.rs` 中的 `DEV_VERSION` 常量（例如 `"2026.06.29.0009"`）
+3. 更新 `CHANGELOG.md`：用上一步写入 AGENTS.md 的最新条目内容覆盖全文
+4. `git add -A && git commit -m "对应提交信息"`
+5. 打标签：`git tag -a vYYYY.MM.DD.xxxx -m "..."`（-m 内容与 CHANGELOG.md 一致）
+6. `git push && git push origin vYYYY.MM.DD.xxxx` — push 触发 CI 自动构建+发版
+7. 不需要改 `Cargo.toml` 的 version（保持 `0.1.0`，仅作为 cargo 元数据）

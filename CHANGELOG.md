@@ -1,10 +1,9 @@
 # Changelog
 
-## 2026.06.29.0007 — 多彩 --help 输出
+## 2026.06.29.0009 — 代理列表更新 + CI 精简 + 版本对齐
 
-- 使用 `clap::builder::styling::Styles` 自定义 help 样式
-- 段头（Usage:/Commands:）→ **黄色加粗**
-- 命令/参数名 → **青色加粗**
-- 短参数（-o, -p）→ 黄色
-- 占位符（<URL>, <OUTPUT>）→ 灰色
-- 子命令也继承相同颜色风格
+- 内置代理从 8 个扩充到 73 个（来自用户提供的公共代理列表）
+- 移除 macOS-13（Intel Mac）CI runner，避免排队等待，保留 Apple Silicon
+- `build.rs` 改用 `DEV_VERSION` 常量，`ghdown --version` 始终显示 AGENTS.md 版本号
+- 新增 `cargo:rerun-if-env-changed`，环境变量 `GHDOWN_VERSION` 变更时自动重编
+- 发版流程文档化到 AGENTS.md 认知修正
