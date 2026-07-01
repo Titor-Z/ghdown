@@ -46,10 +46,18 @@ jobs:
 
       - run: cargo build --release --target ${{ matrix.target }}
 
+      - name: Generate SHA256
+        shell: bash
+        run: |
+          cd target/${{ matrix.target }}/release
+          sha256sum ghdown${{ matrix.ext }} > ghdown${{ matrix.ext }}.sha256
+
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: target/${{ matrix.target }}/release/ghdown${{ matrix.ext }}
+          path: |
+            target/${{ matrix.target }}/release/ghdown${{ matrix.ext }}
+            target/${{ matrix.target }}/release/ghdown${{ matrix.ext }}.sha256
           if-no-files-found: error
 
   release:

@@ -2,6 +2,14 @@
 
 ## Changelog
 
+### 2026.07.02.0011 — Checksum 校验：发布 .sha256 + 下载自动验证
+
+- CI 构建后自动生成 `.sha256` 校验文件，随 release 一起上传
+- 下载时尝试拉取同名 `{url}.sha256` 文件（先走代理再直连 fallback），解析验证 checksum
+- 去掉 `try_resolve_digest_from_url` 对 GitHub API `assets[].digest` 的依赖（该字段不存在）
+- 改用 `sha256sum` 标准格式解析，统一 `sha256:hex` digest 格式
+- 校验不匹配时打印警告（不中断下载），旧 release 无 `.sha256` 文件时静默跳过
+
 ### 2026.06.29.0010 — upgrade 子命令：自动升级
 
 - 新增 `ghdown upgrade` 子命令，自动从 GitHub Release 下载最新版本并替换当前二进制
@@ -136,11 +144,9 @@
 - 支持通过 GitHub API 列出 releases/assets
 - 支持 aria2 导出
 - 多文件并发下载
-- 下载完成后自动校验（如果 release 提供了 checksum）
 
 #### 待办
 
-- 下载完成后自动校验 checksum
 - aria2 导出模式
 
 #### 已完成
@@ -154,6 +160,9 @@
   - 编译通过，测试通过
 - `2026.06.29.0010` upgrade 子命令
   - upgrade.rs — 自动检测平台、GitHub API 查询（代理 fallback）、下载并替换二进制
+- `2026.07.02.0011` Checksum 校验
+  - CI 构建后自动生成 `.sha256` 校验文件，随 release 上传
+  - 下载时自动通过代理拉取 `.sha256` 校验文件并验证 checksum
 
 ### 开发流程
 

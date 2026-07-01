@@ -170,8 +170,9 @@ async fn run() -> Result<()> {
                 std::fs::create_dir_all(parent)?;
             }
         }
+        let expected_digest = try_resolve_digest_from_url(&client, url, &proxy_urls).await;
         let dl = DownloadManager::new(client, cli.quiet);
-        dl.download_with_fallback(url, &proxy_urls, &mut proxy_mgr, &out_path, cli.jobs)
+        dl.download_with_fallback(url, &proxy_urls, &mut proxy_mgr, &out_path, cli.jobs, expected_digest.as_deref())
             .await?;
         if !cli.quiet {
             eprintln!("  ✓ 完成: {}", out_path.display());
@@ -218,6 +219,30 @@ async fn handle_proxy(action: &ProxyAction) -> Result<()> {
         }
     }
     Ok(())
+}
+
+// ===== Checksum 解析 =====
+
+/// 通过代理拉取同名的 .sha256 校验文件，解析出 digest（失败时静默忽略）
+async fn try_resolve_digest_from_url(client: &Client, url: &str, proxy_urls: &[String]) -> Option<String> {
+    let sha_url = format!("{url}.sha256");
+    let mut all_urls: Vec<String> = proxy_urls.iter().map(|p| format!("{p}{sha_url}")).collect();
+    all_urls.push(sha_url);
+
+    for fetch_url in &all_urls {
+        let resp = client.get(fetch_url).send().await.ok()?;
+        if !resp.status().is_success() {
+            continue;
+        }
+        let body = resp.text().await.ok()?;
+        if let Some(hash) = body.lines().next()
+            .and_then(|line| line.split_whitespace().next())
+            .filter(|s| s.len() == 64 && s.chars().all(|c| c.is_ascii_hexdigit()))
+        {
+            return Some(format!("sha256:{hash}"));
+        }
+    }
+    None
 }
 
 // ===== 下载辅助 =====

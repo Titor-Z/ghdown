@@ -6,8 +6,35 @@ use anyhow::{anyhow, Context, Result};
 use futures_util::StreamExt;
 use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use reqwest::Client;
+use sha2::{Digest, Sha256};
 
 use crate::proxy::ProxyManager;
+
+/// 计算文件的 SHA256 并返回 "sha256:hex" 格式的字符串
+fn sha256_file(path: &Path) -> Result<String> {
+    let mut file = fs::File::open(path)
+        .with_context(|| format!("无法打开文件做 checksum 校验: {}", path.display()))?;
+    let mut hasher = Sha256::new();
+    std::io::copy(&mut file, &mut hasher)?;
+    let hash = hasher.finalize();
+    let hex: String = hash.iter().map(|b| format!("{b:02x}")).collect();
+    Ok(format!("sha256:{hex}"))
+}
+
+/// 校验文件 checksum，不匹配时打印警告（不返回错误）
+pub fn verify_checksum(path: &Path, expected_digest: &str) {
+    match sha256_file(path) {
+        Ok(actual) if actual == expected_digest => {}
+        Ok(actual) => {
+            eprintln!(
+                "  ⚠ checksum 不匹配，文件可能已损坏\n    期望: {expected_digest}\n    实际: {actual}"
+            );
+        }
+        Err(e) => {
+            eprintln!("  ⚠ checksum 验证失败: {e}");
+        }
+    }
+}
 
 pub struct DownloadManager {
     client: Client,
@@ -20,6 +47,7 @@ impl DownloadManager {
     }
 
     /// 下载主入口（jobs>1 时自动尝试并发分片，不支持 Range 或小文件则回退单线程）
+    /// 如果提供了 expected_digest，下载完成后自动校验 checksum（不匹配只警告）
     pub async fn download_with_fallback(
         &self,
         asset_url: &str,
@@ -27,6 +55,7 @@ impl DownloadManager {
         proxy_mgr: &mut ProxyManager,
         output_path: &Path,
         jobs: usize,
+        expected_digest: Option<&str>,
     ) -> Result<PathBuf> {
         if jobs > 1 {
             match self.probe_range_support(proxy_urls, asset_url).await {
@@ -37,6 +66,9 @@ impl DownloadManager {
                             Ok(path) => {
                                 proxy_mgr.record_success(&proxy_urls[0]);
                                 let _ = proxy_mgr.persist().await;
+                                if let Some(digest) = expected_digest {
+                                    verify_checksum(&path, digest);
+                                }
                                 return Ok(path);
                             }
                             Err(e) => {
@@ -57,7 +89,13 @@ impl DownloadManager {
             }
         }
 
-        self.download_sequential(asset_url, proxy_urls, proxy_mgr, output_path).await
+        let result = self.download_sequential(asset_url, proxy_urls, proxy_mgr, output_path).await;
+        if let Ok(ref path) = result {
+            if let Some(digest) = expected_digest {
+                verify_checksum(path, digest);
+            }
+        }
+        result
     }
 
     /// HEAD 探测文件大小和 Range 支持

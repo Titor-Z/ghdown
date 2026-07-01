@@ -4,6 +4,7 @@ use anyhow::{anyhow, Result};
 use futures_util::StreamExt;
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use reqwest::Client;
+use sha2::{Digest, Sha256};
 
 use crate::proxy::ProxyManager;
 
@@ -33,8 +34,11 @@ fn candidate_asset_names() -> Result<Vec<String>> {
     ])
 }
 
-/// 从 GitHub API 获取最新 release 信息，返回 (tag, 已匹配的 asset 名, 下载 URL)
-async fn fetch_latest_release(client: &Client, proxy_urls: &[String]) -> Result<(String, String, String)> {
+/// 从 GitHub API 获取最新 release 信息，返回 (tag, asset 名, 下载 URL, 可选 digest)
+async fn fetch_latest_release(
+    client: &Client,
+    proxy_urls: &[String],
+) -> Result<(String, String, String, Option<String>)> {
     let api = "https://api.github.com/repos/Titor-Z/ghdown/releases/latest";
     let candidates = candidate_asset_names()?;
 
@@ -64,16 +68,28 @@ async fn fetch_latest_release(client: &Client, proxy_urls: &[String]) -> Result<
             None => continue,
         };
         for name in &candidates {
-            if let Some(asset_url) = assets
-                .iter()
-                .find(|a| a["name"].as_str() == Some(name))
-                .and_then(|a| a["browser_download_url"].as_str())
-            {
-                return Ok((tag, name.clone(), asset_url.to_string()));
+            if let Some((asset_url, digest)) = assets.iter().find(|a| a["name"].as_str() == Some(name)).map(|a| {
+                let url = a["browser_download_url"].as_str().unwrap_or("");
+                let dig = a["digest"].as_str().map(|d| d.to_string());
+                (url, dig)
+            }) {
+                if !asset_url.is_empty() {
+                    return Ok((tag, name.clone(), asset_url.to_string(), digest));
+                }
             }
         }
     }
     Err(anyhow!("无法获取最新 release 信息，请检查网络"))
+}
+
+/// 计算文件的 SHA256 十六进制字符串
+fn sha256_file(path: &std::path::Path) -> Result<String> {
+    let mut file = std::fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+    std::io::copy(&mut file, &mut hasher)?;
+    let hash = hasher.finalize();
+    let hex: String = hash.iter().map(|b| format!("{b:02x}")).collect();
+    Ok(format!("sha256:{hex}"))
 }
 
 /// 自动升级到最新版本
@@ -88,7 +104,8 @@ pub async fn upgrade(
         eprintln!("  ℹ 当前版本: v{current_version}");
     }
 
-    let (latest_tag, asset_name, asset_url) = fetch_latest_release(&client, proxy_urls).await?;
+    let (latest_tag, asset_name, asset_url, expected_digest) =
+        fetch_latest_release(&client, proxy_urls).await?;
     let latest_ver = latest_tag.trim_start_matches('v');
 
     if latest_ver == current_version {
@@ -135,8 +152,8 @@ pub async fn upgrade(
                     pb
                 };
 
-                let mut file =
-                    std::fs::File::create(&tmp_path).map_err(|e| anyhow!("无法创建临时文件: {e}"))?;
+                let mut file = std::fs::File::create(&tmp_path)
+                    .map_err(|e| anyhow!("无法创建临时文件: {e}"))?;
                 let mut stream = resp.bytes_stream();
                 let mut written = 0u64;
                 while let Some(chunk) = stream.next().await {
@@ -168,6 +185,20 @@ pub async fn upgrade(
 
     if !downloaded {
         return Err(anyhow!("所有代理均下载失败"));
+    }
+
+    // checksum 校验：API 提供了 digest 则强制验证
+    if let Some(ref expected) = expected_digest {
+        let actual = sha256_file(&tmp_path)?;
+        if *expected != actual {
+            let _ = std::fs::remove_file(&tmp_path);
+            return Err(anyhow!(
+                "checksum 不匹配，已删除损坏文件\n  期望: {expected}\n  实际: {actual}"
+            ));
+        }
+        if !quiet {
+            eprintln!("  ✓ checksum 验证通过");
+        }
     }
 
     #[cfg(unix)]
