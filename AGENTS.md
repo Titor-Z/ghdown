@@ -2,6 +2,12 @@
 
 ## Changelog
 
+### 2026.07.02.0012 — Windows self-upgrade 修复：rename+copy 方案
+
+- Windows 下升级不再报"权限不足"：用 `rename(exe→.old)` 释放路径，再 `copy(tmp→exe)` 写入新文件
+- 失败时自动恢复备份，不会丢旧文件
+- Unix 保持原有 `rename` 逻辑不变
+
 ### 2026.07.02.0011 — Checksum 校验：发布 .sha256 + 下载自动验证
 
 - CI 构建后自动生成 `.sha256` 校验文件，随 release 一起上传
@@ -163,6 +169,9 @@
 - `2026.07.02.0011` Checksum 校验
   - CI 构建后自动生成 `.sha256` 校验文件，随 release 上传
   - 下载时自动通过代理拉取 `.sha256` 校验文件并验证 checksum
+- `2026.07.02.0012` Windows self-upgrade 修复
+  - `upgrade.rs` 新增 `replace_exe()` 平台分叉：Unix rename / Windows rename+copy
+  - 失败自动恢复备份，不丢旧文件
 
 ### 开发流程
 

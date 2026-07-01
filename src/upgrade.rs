@@ -92,6 +92,35 @@ fn sha256_file(path: &std::path::Path) -> Result<String> {
     Ok(format!("sha256:{hex}"))
 }
 
+/// 替换当前可执行文件：Unix rename / Windows rename+copy
+#[cfg(unix)]
+fn replace_exe(tmp_path: &std::path::Path, exe_path: &std::path::Path) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(tmp_path, std::fs::Permissions::from_mode(0o755))
+        .map_err(|e| anyhow!("无法设置可执行权限: {e}"))?;
+    std::fs::rename(tmp_path, exe_path)
+        .map_err(|e| anyhow!("无法替换旧文件: {e}"))
+}
+
+/// 替换当前可执行文件：Windows rename+copy（覆写会被锁，先把自己挪走）
+#[cfg(windows)]
+fn replace_exe(tmp_path: &std::path::Path, exe_path: &std::path::Path) -> Result<()> {
+    let backup = exe_path.with_extension("old");
+
+    std::fs::rename(exe_path, &backup)
+        .map_err(|e| anyhow!("无法备份旧文件: {e}"))?;
+
+    if let Err(e) = std::fs::copy(tmp_path, exe_path) {
+        let _ = std::fs::rename(&backup, exe_path);
+        let _ = std::fs::remove_file(tmp_path);
+        return Err(anyhow!("无法写入新文件: {e}"));
+    }
+
+    let _ = std::fs::remove_file(tmp_path);
+    let _ = std::fs::remove_file(&backup);
+    Ok(())
+}
+
 /// 自动升级到最新版本
 pub async fn upgrade(
     client: Client,
@@ -201,15 +230,7 @@ pub async fn upgrade(
         }
     }
 
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&tmp_path, std::fs::Permissions::from_mode(0o755))
-            .map_err(|e| anyhow!("无法设置可执行权限: {e}"))?;
-    }
-
-    std::fs::rename(&tmp_path, &exe_path)
-        .map_err(|e| anyhow!("无法替换旧文件（权限不足）: {e}\n  提示: 尝试以管理员/root 身份运行"))?;
+    replace_exe(&tmp_path, &exe_path)?;
 
     if !quiet {
         eprintln!("  ✓ 已升级到 {latest_tag}");

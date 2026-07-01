@@ -1,5 +1,5 @@
 /// 当前版本（与 AGENTS.md 最新 changelog 条目保持一致）
-const DEV_VERSION: &str = "2026.07.02.0011";
+const DEV_VERSION: &str = "2026.07.02.0012";
 
 fn main() {
     println!("cargo:rerun-if-env-changed=GHDOWN_VERSION");
