@@ -1,6 +1,7 @@
 mod config;
 mod download;
 mod proxy;
+mod upgrade;
 
 use std::io::{IsTerminal, Write};
 use std::path::PathBuf;
@@ -62,6 +63,8 @@ enum Commands {
         #[command(subcommand)]
         action: ProxyAction,
     },
+    /// 自动升级到最新版本
+    Upgrade,
 }
 
 #[derive(Subcommand)]
@@ -100,6 +103,22 @@ async fn run() -> Result<()> {
     if let Some(cmd) = &cli.command {
         match cmd {
             Commands::Proxy { action } => return handle_proxy(action).await,
+            Commands::Upgrade => {
+                let config_mgr = ConfigManager::new()?;
+                let client = Client::builder().user_agent("ghdown/0.1.0").build()?;
+                let mut proxy_mgr = ProxyManager::new(config_mgr).await?;
+                let proxy_urls =
+                    resolve_proxies(&mut proxy_mgr, cli.proxy.as_deref(), cli.no_probe).await?;
+                let _ = proxy_mgr.persist().await;
+                return crate::upgrade::upgrade(
+                    client,
+                    &proxy_urls,
+                    &mut proxy_mgr,
+                    env!("GHDOWN_VERSION"),
+                    cli.quiet,
+                )
+                .await;
+            }
         }
     }
 

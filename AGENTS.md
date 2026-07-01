@@ -2,6 +2,16 @@
 
 ## Changelog
 
+### 2026.06.29.0010 — upgrade 子命令：自动升级
+
+- 新增 `ghdown upgrade` 子命令，自动从 GitHub Release 下载最新版本并替换当前二进制
+- 通过 GitHub API (`repos/anomalyco/ghdown/releases/latest`) 获取最新 release 信息
+- 自动检测当前平台架构（x64/aarch64/arm × linux/windows/mac），匹配对应 asset
+- 支持通过代理访问 API（先遍历代理再直连 fallback）
+- 复用现有代理系统下载二进制文件，带进度条
+- 下载后设置可执行权限（Unix），自动替换可执行文件
+- 版本对比：与当前版本相同时直接提示已是最新
+
 ### 2026.06.29.0001 — 简化重构：只接受 URL
 
 - **彻底简化**：删除 release.rs（GitHub API）、列表、模式匹配等复杂功能
@@ -132,7 +142,6 @@
 
 - 下载完成后自动校验 checksum
 - aria2 导出模式
-- 通过代理查询 GitHub API（解决受限网络下列表问题）
 
 #### 已完成
 
@@ -143,6 +152,8 @@
   - release.rs — GitHub API 查询 + 模式匹配
   - main.rs — CLI 参数解析、子命令分发
   - 编译通过，测试通过
+- `2026.06.29.0010` upgrade 子命令
+  - upgrade.rs — 自动检测平台、GitHub API 查询（代理 fallback）、下载并替换二进制
 
 ### 开发流程
 
